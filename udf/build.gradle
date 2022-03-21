@@ -1,0 +1,50 @@
+plugins {
+    id "java"
+    id "com.github.johnrengelman.shadow" version "6.0.0"
+}
+
+sourceCompatibility = "1.8"
+targetCompatibility = "1.8"
+version = "0.0.1"
+
+repositories {
+    mavenCentral()
+
+    maven {
+        url "https://packages.confluent.io/maven"
+    }
+}
+
+configurations {
+    toCopy
+}
+
+dependencies {
+    implementation 'io.confluent.ksql:ksql-udf:5.4.6'
+    implementation "org.apache.kafka:kafka_2.12:2.4.0"
+    implementation 'ml.combust.mleap:mleap-runtime_2.12:0.19.0'
+    implementation 'org.mlflow:mlflow-client:1.24.0'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.10.0'
+    toCopy 'ml.combust.mleap:mleap-runtime_2.12:0.19.0'
+    toCopy 'org.mlflow:mlflow-client:1.24.0'
+    toCopy 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.10.0'
+}
+
+apply plugin: "com.github.johnrengelman.shadow"
+apply plugin: "java"
+
+compileJava {
+    options.compilerArgs << "-parameters"
+}
+
+shadowJar {
+    archiveBaseName = "example-udfs"
+    archiveClassifier = ""
+    destinationDirectory = file("extensions")
+}
+
+
+task download(type: Copy) {
+    from configurations.toCopy
+    into 'lib'
+}

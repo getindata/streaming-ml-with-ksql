@@ -1,0 +1,160 @@
+version: '3'
+services:
+  kafka:
+    container_name: kafka
+    image: confluentinc/cp-kafka:7.0.1
+    ports:
+     - "9092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      KAFKA_HEAP_OPTS: "-Xmx256M"
+    command:
+    - bash
+    - -c
+    - sed -i '/KAFKA_ZOOKEEPER_CONNECT/d' /etc/confluent/docker/configure && sed -i 's/cub zk-ready/echo ignore zk-ready/' /etc/confluent/docker/ensure && echo 'kafka-storage format --ignore-formatted -t $$(kafka-storage random-uuid) -c /etc/kafka/kafka.properties' >> /etc/confluent/docker/ensure && /etc/confluent/docker/run
+
+  schema-registry:
+    container_name: schema-registry
+    image: confluentinc/cp-schema-registry:7.0.1
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_HEAP_OPTS: "-Xmx128M"
+    depends_on:
+    - kafka
+
+  connect:
+    container_name: connect
+    build: ./infra/connect
+    ports:
+    - 8083:8083
+    depends_on:
+    - kafka
+    - schema-registry
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx256M"
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_GROUP_ID: 100
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+
+  ksql:
+    container_name: ksql
+    #image: confluentinc/ksqldb-server:0.23.1
+    image: confluentinc/cp-ksql-server:5.4.6
+    depends_on:
+    - kafka
+    - schema-registry
+    volumes:
+    - "./udf/build/libs:/opt/ksqldb-udfs"
+    - "./udf/lib:/opt/mleap"
+    ports:
+    - 8088:8088
+    environment:
+      KSQL_CLASSPATH: '/usr/share/java/ksql-server/*:/opt/mleap/*'
+      KSQL_HEAP_OPTS: '-Xmx256M'
+      KSQL_BOOTSTRAP_SERVERS: kafka:9092
+      KSQL_LISTENERS: http://0.0.0.0:8088/
+      KSQL_KSQL_SERVICE_ID: ksql_service
+      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      KSQL_KSQL_EXTENSION_DIR: /opt/ksqldb-udfs
+      KSQL_KSQL_STREAMS_AUTO_OFFSET_RESET: earliest
+      MLFLOW_URL: http://mlflow:8080
+
+  mongo:
+    container_name: mongo
+    image: mongo:5.0.5
+    ports:
+    - 27017:27017
+    volumes:
+    - ./infra/mongo/init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+    - ./infra/mongo/keyfile.pem:/tmp/keyfile.pem.orig:ro
+    entrypoint:
+    - bash
+    - -c
+    - |
+         cp /tmp/keyfile.pem.orig /tmp/keyfile.pem
+         chmod 400 /tmp/keyfile.pem
+         chown 999:999 /tmp/keyfile.pem
+         exec docker-entrypoint.sh $$@
+    command: ["mongod", "--bind_ip", "0.0.0.0", "--replSet", "rs0", "--auth", "--keyFile", "/tmp/keyfile.pem"]
+
+  mysql:
+    container_name: mysql
+    image: mysql:8.0.27
+    ports:
+    - 3006:3006
+    environment:
+      MYSQL_ROOT_PASSWORD: kafkademo
+    volumes:
+    - ./infra/mysql/mysql.cnf:/etc/mysql/conf.d/mysql.cnf
+    - ./infra/mysql/setup.sql:/docker-entrypoint-initdb.d/setup.sql
+    command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+
+  minio:
+    container_name: minio
+    image: minio/minio:RELEASE.2022-03-14T18-25-24Z
+    ports:
+    - 9000:9000
+    - 9001:9001
+    command:
+    - server
+    - /data 
+    - --console-address 
+    - :9001
+
+  create-minio-bucket:
+    image: minio/mc:RELEASE.2022-03-13T22-34-00Z
+    depends_on:
+    - minio
+    entrypoint:
+    - /bin/sh
+    - -c
+    - |
+      sleep 5;
+      mc config host add s3 http://minio:9000 minioadmin minioadmin --api S3v4;
+      [[ ! -z "`mc ls s3 | grep mlflow`" ]] || mc mb s3/mlflow;
+      exit 0;
+
+  mlflow:
+    container_name: mlflow
+    image: gcr.io/getindata-images-public/mlflow:1.24.0
+    environment:
+      BACKEND_STORE_URI: sqlite:////tmp/experiments.db
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      DEFAULT_ARTIFACT_ROOT: s3://mlflow/
+    ports:
+    - 8080:8080
+
+  train-model:
+    depends_on:
+    - mlflow
+    build: ./model-trainer
