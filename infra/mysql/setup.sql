@@ -7,10 +7,12 @@ USE demo;
 CREATE TABLE users (
   id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) NOT NULL,
-  description LONGTEXT
+  platform VARCHAR(255),
+  country VARCHAR(3),
+  ip_address VARCHAR(30),
+  nb_orders INT DEFAULT 0 NOT NULL
 );
 
 INSERT INTO users
-VALUES (DEFAULT, "Alice", "alice@example.com", null),
-       (DEFAULT, "Bob", "bob@example.com", null);
+VALUES (DEFAULT, "Alice", "Windows", "PL", "10.10.10.10", 0),
+       (DEFAULT, "Bob", "Android", "FR", "14.14.14.14", 1);

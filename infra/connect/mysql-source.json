@@ -13,6 +13,9 @@
     "database.whitelist": "demo",
     "snapshot.mode": "when_needed",
     "database.history.kafka.bootstrap.servers": "kafka:9092",
-    "database.history.kafka.topic": "mysql.schema-changes"
+    "database.history.kafka.topic": "mysql.schema-changes",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "true"
   }
 }

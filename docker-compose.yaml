@@ -158,3 +158,9 @@ services:
     depends_on:
     - mlflow
     build: ./model-trainer
+
+  traffic-generator:
+    container_name: traffic-generator
+    depends_on:
+    - kafka
+    build: ./traffic-generator
