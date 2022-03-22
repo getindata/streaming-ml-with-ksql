@@ -90,20 +90,20 @@ services:
   mongo:
     container_name: mongo
     image: mongo:5.0.5
-    ports:
-    - 27017:27017
-    volumes:
-    - ./infra/mongo/init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
-    - ./infra/mongo/keyfile.pem:/tmp/keyfile.pem.orig:ro
-    entrypoint:
-    - bash
-    - -c
-    - |
-         cp /tmp/keyfile.pem.orig /tmp/keyfile.pem
-         chmod 400 /tmp/keyfile.pem
-         chown 999:999 /tmp/keyfile.pem
-         exec docker-entrypoint.sh $$@
-    command: ["mongod", "--bind_ip", "0.0.0.0", "--replSet", "rs0", "--auth", "--keyFile", "/tmp/keyfile.pem"]
+    #ports:
+    #- 27017:27017
+    #volumes:
+    #- ./infra/mongo/init.sh:/docker-entrypoint-initdb.d/mongo-init.sh
+    #- ./infra/mongo/keyfile.pem:/tmp/keyfile.pem.orig:ro
+    #entrypoint:
+    #- bash
+    #- -c
+    #- |
+    #     cp /tmp/keyfile.pem.orig /tmp/keyfile.pem
+    #     chmod 400 /tmp/keyfile.pem
+    #     chown 999:999 /tmp/keyfile.pem
+    #     exec docker-entrypoint.sh $$@
+    # command: ["mongod", "--bind_ip", "0.0.0.0", "--replSet", "rs0", "--auth", "--keyFile", "/tmp/keyfile.pem"]
 
   mysql:
     container_name: mysql

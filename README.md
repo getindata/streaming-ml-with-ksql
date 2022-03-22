@@ -31,17 +31,17 @@ A proof-of-concept of a MLOps system that doesn't require coding skills (other t
 1. You may want to add some records to MySQL (`docker exec -ti mysql mysql -pkafkademo demo`) and check the changes with `select * from users emit changes;`
 1. Next, simulate some traffic:
 
-        $ docker exec -ti traffic-generator bas
+        $ docker exec -ti traffic-generator bash
         python generator.py
 
 1. Configured aggregated views on the data with 10-minutes hoping window (2-minutes slide):
 
-    CREATE STREAM events WITH (KAFKA_TOPIC = 'events', VALUE_FORMAT = 'AVRO', TIMESTAMP='ts');
+        CREATE STREAM events WITH (KAFKA_TOPIC = 'events', VALUE_FORMAT = 'AVRO', TIMESTAMP='ts');
 
         CREATE TABLE events_in_10_minutes_window AS SELECT 
           user_id,
-          TIMESTAMPTOSTRING(min(events.rowtime), 'HH:mm:ss'),
-          TIMESTAMPTOSTRING(max(events.rowtime), 'HH:mm:ss'),
+          TIMESTAMPTOSTRING(min(events.rowtime), 'HH:mm:ss') as window_start,
+          TIMESTAMPTOSTRING(max(events.rowtime), 'HH:mm:ss') as window_end,
           SUM(CASE WHEN event = 'main_page' THEN 1 ELSE 0 END) AS main_page_views,
           SUM(CASE WHEN event = 'products_listing' THEN 1 ELSE 0 END) AS listing_views,
           SUM(CASE WHEN event = 'product_page' THEN 1 ELSE 0 END) AS product_views,
@@ -49,10 +49,39 @@ A proof-of-concept of a MLOps system that doesn't require coding skills (other t
         FROM events 
         WINDOW HOPPING (SIZE 10 MINUTES, ADVANCE BY 2 MINUTES) GROUP BY user_id;
 
-        CREATE STREAM aggregatd_events_stream WITH (KAFKA_TOPIC = 'EVENTS_IN_10_MINUTES_WINDOW', VALUE_FORMAT = 'AVRO');
+        CREATE STREAM aggregated_events_stream WITH (KAFKA_TOPIC = 'EVENTS_IN_10_MINUTES_WINDOW', VALUE_FORMAT = 'AVRO');
 
-1. Finally, pass the data through ML model trained in the earlier steps:
+1. Check input data for model:
 
-        SELECT user_id, predict('Bot Detector', as_array(country, platform), as_array(product_views, listing_views, gallery_views, nb_orders)) FROM aggregatd_events_stream
-        LEFT JOIN users ON aggregatd_events_stream.user_id = users.rowkey
+        SELECT user_id, country, platform, product_views, listing_views, gallery_views, nb_orders FROM aggregated_events_stream
+        LEFT JOIN users ON aggregated_events_stream.user_id = users.rowkey
         EMIT CHANGES;
+
+1. Finally, pass the data through ML model trained in the earlier steps and push results back to Kafka:
+
+        CREATE STREAM bot_detection_results AS
+        SELECT
+            user_id,
+            ip_address,
+            window_start,
+            window_end,
+            predict('Bot Detector', as_array(country, platform), as_array(product_views, listing_views, gallery_views, nb_orders)) AS prediction
+        FROM aggregated_events_stream
+        LEFT JOIN users ON aggregated_events_stream.user_id = users.rowkey;
+
+1. Push the topic with predictions into MongoDB:
+
+        http :8083/connectors @infra/connect/mongo-sink.json
+
+1. Verify data in MongoDB:
+
+        docker exec -ti mongo mongo
+        > db.bot_detection_results.find()
+
+## Resetting the state
+
+In order to keep the trained models, but reset Kafka state as a demo preparation, run:
+
+    docker-compose stop kafka schema-registry connect mysql ksql mongo
+    docker-compose rm -f kafka mysql mongo
+    docker-compose up -d

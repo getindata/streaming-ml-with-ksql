@@ -1,0 +1,12 @@
+{
+  "name": "mongo-sink",
+  "config": {
+    "connector.class": "com.mongodb.kafka.connect.MongoSinkConnector",
+    "topics.regex": "BOT_DETECTION_RESULTS",
+    "table.name.format": "${topic}",
+    "connection.uri": "mongodb://mongo/test",
+    "database": "test",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "collection": "bot_detection_results"
+  }
+}
