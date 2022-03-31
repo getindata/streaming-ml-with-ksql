@@ -6,7 +6,7 @@ A proof-of-concept of a MLOps system that doesn't require coding skills (other t
 * Models trained on generated sample data with [Spark MLLib](https://spark.apache.org/mllib/), serialized using [Mleap](https://github.com/combust/mleap)
 * [Kafka Connect](https://kafka.apache.org/documentation/#connect) server to stream the inputs from database using CDC
 * [KSQL](https://ksqldb.io/) User Defined Function (UDF) that downloads the model and runs the predictions
-* random data generator for demo purposes
+* random training and prediction data generator for demo purposes, using [DOGE](https://github.com/getindata/doge-datagen)
 
 ## How to run it?
 
